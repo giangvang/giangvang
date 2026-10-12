@@ -1,0 +1,13 @@
+Phân tích Hiệu suất trước và sau Tối ưu hóa
+
+1. Trước khi tối ưu (Điểm nghẽn):
+Câu truy vấn cũ sử dụng YEAR(created_at) và MONTH(created_at). Việc bọc cột bằng các hàm toán học khiến truy vấn trở thành Non-SARGable. Cơ sở dữ liệu không thể sử dụng thuật toán tìm kiếm nhị phân trên Index, dẫn đến cột type trong EXPLAIN hiển thị là ALL (Full Table Scan). Hệ thống phải quét toàn bộ 5,000,000 dòng, gây tốn kém CPU, RAM và I/O.
+
+2. Sau khi tối ưu:
+Bằng việc tạo Composite Index idx_type_date và viết lại điều kiện thời gian thành dạng khoảng (Range) created_at >= '...' AND created_at < '...', truy vấn đã trở nên SARGable. Kết quả EXPLAIN thay đổi rõ rệt:
+
+Cột type: Chuyển từ ALL sang range (hoặc ref), báo hiệu đã sử dụng Index Scan.
+
+Cột possible_keys & key: Nhận diện và sử dụng đúng Index idx_type_date.
+
+Cột rows: Giảm từ 5,000,000 dòng xuống chỉ còn chính xác số lượng giao dịch diễn ra trong tháng 6/2026. Điểm nghẽn hiệu suất được loại bỏ hoàn toàn.

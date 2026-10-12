@@ -1,0 +1,28 @@
+Nhật ký Tương tác Kỹ thuật AI
+Học viên (Prompt 1 - Bước 1): Trong MySQL, nếu tôi tạo Index cho một cột ngày tháng, nhưng trong mệnh đề WHERE tôi lại viết WHERE YEAR(col) = 2026, tại sao MySQL lại từ chối sử dụng Index và phải quét toàn bộ bảng?
+AI Trả lời: Khi bạn dùng hàm YEAR(col), MySQL phải áp dụng hàm này lên từng dòng một của toàn bộ bảng để tính ra giá trị rồi mới so sánh với 2026. Điều này phá vỡ cấu trúc sắp xếp (B-Tree) của Index, khiến truy vấn trở thành Non-SARGable. Thay vì nhảy thẳng đến dữ liệu năm 2026, MySQL buộc phải quét toàn bộ bảng (Full Table Scan).
+
+Học viên (Prompt 2 - Bước 2): Khi thiết kế một Composite Index cho (transaction_type, created_at), thứ tự các cột có quan trọng không? Tôi nên đặt cột nào đứng trước?
+AI Trả lời: Rất quan trọng (Nguyên tắc Left-to-Right). Bạn phải luôn đặt cột truy vấn theo dấu bằng (Equality: transaction_type = 'DEPOSIT') lên trước. Cột truy vấn theo khoảng (Range: khoảng thời gian) đặt ở sau. Nếu làm ngược lại, Index sẽ dừng lọc ngay tại cột Range, làm giảm hiệu suất (Selectivity).
+
+Học viên (Prompt 3 - Bước 3): Làm thế nào để tôi có thể xem được chi tiết thời gian thực thi (Execution Time) thay vì chỉ xem Execution Plan?
+AI Trả lời: Hãy chạy lệnh SET profiling = 1; trước khi chạy truy vấn. Sau đó chạy truy vấn, và cuối cùng gõ lệnh SHOW PROFILES;. MySQL sẽ trả về chính xác thời gian thực thi (tính bằng milli-giây) của các câu lệnh vừa chạy.
+
+Học viên (Prompt 4 - Bước 4): Trong kết quả EXPLAIN, cột 'Extra' hiện 'Using index condition' khác gì với 'Using index'?
+AI Trả lời:
+
+Using index (Covering Index): Mọi dữ liệu bạn cần lấy (trong SELECT) đều đã nằm sẵn trên cây Index. MySQL không cần quay lại bảng gốc (Data pages) để tìm thêm. Cực kỳ nhanh.
+
+Using index condition (Index Condition Pushdown): MySQL sử dụng Index để lọc dữ liệu ở tầng Storage Engine trước khi gửi lên Server, giúp giảm bớt số dòng phải xử lý, nhưng vẫn phải tham chiếu về bảng gốc để lấy các cột không nằm trong Index (ví dụ cột amount).
+Chuẩn bị cho Vòng Vấn đáp:
+Câu 1: "Thứ tự thực thi thực tế của mệnh đề WHERE và SELECT?"
+
+Trả lời: Trong một vòng đời truy vấn, SQL Engine chạy mệnh đề FROM đầu tiên để xác định bảng, sau đó chạy ngay đến WHERE để lọc dữ liệu. Mệnh đề SELECT chạy ở gần cuối (sau GROUP BY và HAVING). WHERE chạy trước để giảm thiểu tối đa lượng dữ liệu phải nạp vào bộ nhớ trước khi SELECT định dạng kết quả trả về.
+
+Câu 2: "Trường hợp nào Full Table Scan lại chạy nhanh hơn Index Scan?"
+
+Trả lời: Full Table Scan nhanh hơn Index Scan khi ta cần truy xuất một lượng lớn dữ liệu của bảng (ví dụ trên 20-30% tổng số dòng). Lý do là Full Table Scan đọc các khối dữ liệu (Blocks) một cách tuần tự (Sequential I/O) trên ổ cứng. Trong khi đó, Index Scan phải đọc cây Index, lấy ID, rồi nhảy ngẫu nhiên vào bảng gốc để lấy dữ liệu (Random I/O). Random I/O trên số lượng dòng quá lớn sẽ chậm hơn nhiều so với việc quét càn tuần tự.
+
+Câu 3: "Rủi ro khi bảng bị thao tác INSERT/UPDATE/DELETE liên tục mà lại tạo nhiều Index?"
+
+Trả lời: Index là một cấu trúc dữ liệu vật lý (B-Tree). Mỗi khi ta Thêm, Sửa hoặc Xóa dữ liệu trong bảng, hệ quản trị CSDL buộc phải cập nhật lại (Rebuild/Rebalance) toàn bộ các cây Index liên quan. Nếu tạo quá nhiều Index trên một bảng có tần suất ghi (Write) cao, hệ thống sẽ gặp hiện tượng Write Penalty – tức là tốc độ ghi giảm thê thảm, đồng thời gây lãng phí dung lượng ổ cứng. Do đó, chỉ nên tạo Index phục vụ đúng cho các truy vấn Read thực sự quan trọng.
